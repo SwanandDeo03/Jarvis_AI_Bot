@@ -2,47 +2,57 @@ import 'package:flutter/material.dart';
 
 class MicButton extends StatefulWidget {
   final bool isListening;
-  final VoidCallback onStart;
-  final VoidCallback onStop;
+  final bool isProcessing;
+  final VoidCallback onToggle;
 
   const MicButton({
     super.key,
     required this.isListening,
-    required this.onStart,
-    required this.onStop,
+    this.isProcessing = false,
+    required this.onToggle,
   });
 
   @override
   State<MicButton> createState() => _MicButtonState();
 }
 
-class _MicButtonState extends State<MicButton>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _animation;
+class _MicButtonState extends State<MicButton> with TickerProviderStateMixin {
+  late AnimationController _pulseController;
+  late AnimationController _rippleController;
+  late Animation<double> _pulseAnimation;
+  late Animation<double> _rippleAnimation;
 
   @override
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
+    _pulseController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 800),
+      duration: const Duration(milliseconds: 1000),
     );
 
-    _animation = Tween<double>(begin: 1.0, end: 1.3).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    _controller.addStatusListener((status) {
+    _pulseController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _controller.reverse();
+        _pulseController.reverse();
       } else if (status == AnimationStatus.dismissed) {
         if (widget.isListening) {
-          _controller.forward();
+          _pulseController.forward();
         }
       }
     });
+
+    _rippleController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _rippleAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _rippleController, curve: Curves.easeOut),
+    );
   }
 
   @override
@@ -50,59 +60,128 @@ class _MicButtonState extends State<MicButton>
     super.didUpdateWidget(oldWidget);
 
     if (widget.isListening) {
-      _controller.forward();
+      _pulseController.forward();
+      _rippleController.repeat();
     } else {
-      _controller.stop();
-      _controller.reset();
+      _pulseController.stop();
+      _pulseController.reset();
+      _rippleController.stop();
+      _rippleController.reset();
     }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _pulseController.dispose();
+    _rippleController.dispose();
     super.dispose();
-  }
-
-  void _handlePressStart(_) {
-    widget.onStart();
-  }
-
-  void _handlePressEnd(_) {
-    widget.onStop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onLongPressStart: _handlePressStart,
-      onLongPressEnd: _handlePressEnd,
-      child: ScaleTransition(
-        scale: _animation,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: LinearGradient(
-              colors: widget.isListening
-                  ? [Colors.redAccent, Colors.red]
-                  : [Colors.blueAccent, Colors.blue],
+    const Color activeColor = Color(0xFF00E5FF);
+    const Color inactiveColor = Color(0xFF00BCD4);
+
+    return SizedBox(
+      width: 120,
+      height: 120,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Ripple ring 1
+          if (widget.isListening)
+            AnimatedBuilder(
+              animation: _rippleAnimation,
+              builder: (context, child) {
+                return Container(
+                  width: 80 + (60 * _rippleAnimation.value),
+                  height: 80 + (60 * _rippleAnimation.value),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: activeColor.withValues(
+                        alpha: 1.0 - _rippleAnimation.value,
+                      ),
+                      width: 2,
+                    ),
+                  ),
+                );
+              },
             ),
-            boxShadow: [
-              BoxShadow(
-                color: widget.isListening
-                    ? Colors.red.withOpacity(0.6)
-                    : Colors.blue.withOpacity(0.6),
-                blurRadius: 20,
-                spreadRadius: 4,
+
+          // Ripple ring 2 (offset)
+          if (widget.isListening)
+            AnimatedBuilder(
+              animation: _rippleAnimation,
+              builder: (context, child) {
+                final delayed = (_rippleAnimation.value + 0.3) % 1.0;
+                return Container(
+                  width: 80 + (60 * delayed),
+                  height: 80 + (60 * delayed),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: activeColor.withValues(
+                        alpha: (1.0 - delayed) * 0.5,
+                      ),
+                      width: 1.5,
+                    ),
+                  ),
+                );
+              },
+            ),
+
+          // Main mic button
+          GestureDetector(
+            onTap: widget.isProcessing ? null : widget.onToggle,
+            child: ScaleTransition(
+              scale: _pulseAnimation,
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: widget.isListening
+                        ? const [Color(0xFFFF1744), Color(0xFFD50000)]
+                        : const [activeColor, inactiveColor],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          (widget.isListening
+                                  ? const Color(0xFFFF1744)
+                                  : activeColor)
+                              .withValues(alpha: 0.5),
+                      blurRadius: widget.isListening ? 30 : 20,
+                      spreadRadius: widget.isListening ? 6 : 3,
+                    ),
+                    BoxShadow(
+                      color:
+                          (widget.isListening
+                                  ? const Color(0xFFFF1744)
+                                  : activeColor)
+                              .withValues(alpha: 0.2),
+                      blurRadius: 40,
+                      spreadRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  widget.isProcessing
+                      ? Icons.hourglass_top_rounded
+                      : widget.isListening
+                      ? Icons.stop_rounded
+                      : Icons.mic_rounded,
+                  color: Colors.white,
+                  size: 32,
+                ),
               ),
-            ],
+            ),
           ),
-          child: Icon(
-            widget.isListening ? Icons.mic : Icons.mic_none,
-            color: Colors.white,
-            size: 32,
-          ),
-        ),
+        ],
       ),
     );
   }

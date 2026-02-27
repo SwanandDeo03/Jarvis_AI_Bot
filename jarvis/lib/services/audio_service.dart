@@ -1,4 +1,5 @@
 import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
 
 class AudioService {
   final AudioRecorder _recorder = AudioRecorder();
@@ -7,7 +8,8 @@ class AudioService {
   /// Start recording audio
   Future<void> startRecording() async {
     if (await _recorder.hasPermission()) {
-      _currentPath = 'jarvis_audio.wav';
+      final dir = await getTemporaryDirectory();
+      _currentPath = '${dir.path}/jarvis_audio.wav';
 
       await _recorder.start(
         const RecordConfig(
