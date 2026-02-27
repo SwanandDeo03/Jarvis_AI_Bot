@@ -70,19 +70,34 @@ class _JarvisHomeState extends State<JarvisHome> {
 
   /// Send audio to backend
   Future<void> sendToJarvis(String path) async {
+    // Show processing state while sending
     setState(() {
-      messages.add({"role": "user", "text": "🎤 Voice message sent"});
+      isProcessing = true;
     });
+
     _scrollToBottom();
 
-    String reply = await jarvisApi.sendAudioToJarvis(path);
+    final Map<String, String> result = await jarvisApi.sendAudioToJarvis(path);
+
+    final transcript = result['transcript'] ?? '';
+    final reply = result['reply'] ?? '';
 
     if (mounted) {
       setState(() {
-        messages.add({"role": "jarvis", "text": reply});
+        // Add the transcribed user message (if available), otherwise a generic marker
+        messages.add({"role": "user", "text": transcript.isNotEmpty ? transcript : "(Voice message)"});
+
+        // Add Jarvis' textual reply
+        messages.add({"role": "jarvis", "text": reply.isNotEmpty ? reply : "No reply from server."});
+        isProcessing = false;
+        isListening = false;
       });
+
       _scrollToBottom();
-      speak(reply);
+
+      if (reply.isNotEmpty) {
+        speak(reply);
+      }
     }
   }
 
