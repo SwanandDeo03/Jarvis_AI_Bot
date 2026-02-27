@@ -1,8 +1,12 @@
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 import whisper
 import tempfile
 import os
+import uvicorn
+
+from brain.brain import think
 
 # ---------------------------
 # App initialization
@@ -39,6 +43,32 @@ def health_check():
     return {"status": "Jarvis backend is running"}
 
 # ---------------------------
+# Jarvis text endpoint
+# ---------------------------
+class JarvisRequest(BaseModel):
+    text: str
+
+@app.post("/jarvis", tags=["Jarvis"])
+async def jarvis_endpoint(request: JarvisRequest):
+    """
+    Receives text input,
+    processes it through Jarvis brain,
+    returns Jarvis reply
+    """
+    user_text = request.text.strip()
+
+    if not user_text:
+        return {"user_text": "", "jarvis_reply": "I didn't catch that. Please try again."}
+
+    memory_context = {}
+    reply = think(user_text, memory_context)
+
+    return {
+        "user_text": user_text,
+        "jarvis_reply": reply
+    }
+
+# ---------------------------
 # Speech-to-text endpoint
 # ---------------------------
 @app.post("/speech-to-text", tags=["Speech"])
@@ -68,7 +98,9 @@ async def speech_to_text(file: UploadFile = File(...)):
         if not text:
             reply = "I didn't catch that. Please try again."
         else:
-            reply = f"I heard you say: {text}"
+            # Use brain module for intelligent reply
+            memory_context = {}
+            reply = think(text, memory_context)
 
         return {
             "user_text": text,
@@ -85,3 +117,9 @@ async def speech_to_text(file: UploadFile = File(...)):
         # Clean up temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
+
+# ---------------------------
+# Entry point
+# ---------------------------
+if __name__ == "__main__":
+    uvicorn.run("api:app", host="0.0.0.0", port=8000, reload=True)
