@@ -2,18 +2,34 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class JarvisApi {
+  // 🔥 Your EC2 Public IP
+  static const String baseUrl = "http://3.110.75.23:8000";
+
   Future<String> sendAudioToJarvis(String path) async {
-    var request = http.MultipartRequest(
-      'POST',
-      Uri.parse('http://192.168.1.4:8000/speech-to-text'),
-    );
+    try {
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/speech-to-text'),
+      );
 
-    request.files.add(await http.MultipartFile.fromPath('file', path));
+      // Attach audio file
+      request.files.add(await http.MultipartFile.fromPath('file', path));
 
-    var response = await request.send();
-    var responseBody = await response.stream.bytesToString();
-    var data = jsonDecode(responseBody);
+      var response = await request.send();
 
-    return data["jarvis_reply"];
+      // Convert stream response to string
+      var responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        var data = jsonDecode(responseBody);
+
+        // 🔥 Safe extraction
+        return data["jarvis_reply"] ?? data["text"] ?? "No reply from server";
+      } else {
+        return "Server Error: ${response.statusCode}\n$responseBody";
+      }
+    } catch (e) {
+      return "Connection Failed: $e";
+    }
   }
 }
